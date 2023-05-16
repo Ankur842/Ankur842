@@ -1,0 +1,305 @@
+Install etcdctl:
+   export RELEASE="3.3.13"
+   wget https://github.com/etcd-io/etcd/releases/download/v${RELEASE}/etcd-v${RELEASE}-linux-amd64.tar.gz
+   tar xvf etcd-v${RELEASE}-linux-amd64.tar.gz
+   cd etcd-v${RELEASE}-linux-amd64
+   sudo mv etcdctl /usr/local/bin
+etcd snapshot explanation
+the idea is to create a snapshot of the etcd database. This is done by communicating with the running etcd instance in Kubernetes and asking it to create a snapshot. in order to communicate with the etcd pod in Kubernetes, we need to:
+
+	Use the host network in order to access 127.0.0.1:2379, where etcd is exposed (--network host)
+	Specify the correct etcd API version as environment variable (--env ETCDCTL_API=3)
+	The actual command for creating a snapshot (etcdctl snapshot save /backup/etcd-snapshot-latest.db)
+		Some flags for the etcdctl command
+		Specify where to connect to (--endpoints=https://127.0.0.1:2379)
+		Specify certificates to use (--cacert=..., --cert=..., --key=...)
+backup ETCD Data:
+mkdir /etcd-backup
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key snapshot save /etcd-backup/etcd-snapshot-latest.db
+
+remove /var/lib/etcd folder, delete couple of deployments/pods
+restore ETCD Data:
+ETCDCTL_API=3 etcdctl snapshot restore /etcd-backup/etcd-snapshot-latest.db --initial-cluster etcd-restore=https://10.128.0.42:2380 --initial-advertise-peer-urls=https://10.128.0.42:2380 --name etcd-restore --data-dir /var/lib/etcd
+
+ETCD Operations
+kubectl -n kube-system get pods
+
+kubectl -n kube-system get pod etcd-kube-master -o yaml
+
+kubectl -n kube-system exec -it etcd-kube-master -- sh
+
+netstat -anp | grep 2379
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key member list
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key get / --prefix --keys-only
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key get /registry/serviceaccounts/default/default
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key put /naresh/mykey myvalue
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key get /naresh --prefix --keys-only
+
+ETCDCTL_API=3 etcdctl --endpoints=192.168.198.147:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key watch /naresh
+
+etcdctl mk     /path/newkey some-data       # Create key
+etcdctl set    /path/newkey some-data       # Create or update key
+etcdctl update /path/key new-data           # Update key
+etcdctl put    /path/key new-data
+etcdctl rm     /path/key
+etcdctl rm     /path --recursive
+*******************************************************************************************************************
+Create a namespace by using the following command:
+...
+
+kubectl create namespace role
+
+Create a directory role.
+...
+
+mkdir role cd role
+
+Generating an RSA private key and certificate requests
+To generate an RSA private key, run the following command:
+...
+
+sudo openssl genrsa -out user3.key 2048
+
+Use the following command to generate certificate requests:
+...
+
+sudo openssl req -new -key user3.key -out user3.csr
+
+Enter any details like:
+
+• Organization Name: namespace
+
+• Common Name: user3
+
+Run the following command to link an identity to a private key using a digital signature.
+sudo openssl x509 -req -in user3.csr -CA /etc/kubernetes/pki/ca.crt -CAkey /etc/kubernetes/pki/ca.key -CAcreateserial -out user3.crt -days 500
+
+Creating role
+To create a role,
+
+...
+
+kubectl create -f https://raw.githubusercontent.com/Sonal0409/Container-Orchestration-using-Kubernetes/main/Day4-Notes/RBAC/role.yml
+
+kubectl get roles -n role
+
+Creating a rolebinding
+Create rolebinding by using the following command:
+
+kubectl create -f https://raw.githubusercontent.com/Sonal0409/Container-Orchestration-using-Kubernetes/main/Day4-Notes/RBAC/rolebinding.yml
+
+kubectl get rolebinding -n role
+
+Setting credentials to the user
+Set credentials to user3.
+
+kubectl config set-credentials user3 --client-certificate=/root/role/user3.crt --client-key=/root/role/user3.key
+
+Set context to user3.
+kubectl config set-context user3-context --cluster=kubernetes --namespace=role --user=user3
+
+Run the following command to display current contexts:
+kubectl config get-contexts
+
+Copying the config file to the client machine
+Copy the config file from the master node in the home directory to the worker node.
+
+cd ..
+
+cat .kube/config
+
+Paste the copied config file into the client machine in root directory iteself.
+vi myconf
+
+copy the master config file contents to this file
+
+In the worker node
+create a role directory
+
+mkdir role
+
+cd role
+
+Copy the crt and key files from the master node to the worker node in the /role directory.
+
+keep the filename same as on master node
+
+vim user3.crt
+
+vim user3.key
+
+Locate the home directory.
+cd ..
+
+Run the following commands to verify roles we have generated:
+kubectl get pods --kubeconfig=myconf
+
+kubectl create deployment test --image=docker.io/httpd -n role --kubeconfig=myconf
+
+kubectl get pods --kubeconfig=myconf
+
+kubectl get deployment --kubeconfig=myconf
+
+The worker node can create, update, remove, and list pods, services, and deployments after using the master config settings.
+=====================================================================================================================
+Deploy MySQL Using Azure Dynamic Storage Class
+Creating an AKS cluster
+kubectl get nodes
+
+kubectl get sc
+
+Create an Azure disk for dynamic persistent volume.
+Create a persistent volume clam:
+
+...
+
+kubectl apply -f https://raw.githubusercontent.com/Sonal0409/Container-Orchestration-using-Kubernetes/main/Day4-Notes/Volumes/azure-pvc.yml
+
+...
+
+Deploy MySQL Pods with Azure disk as PVC.
+...
+
+kubectl apply -f https://raw.githubusercontent.com/Sonal0409/Container-Orchestration-using-Kubernetes/main/Day4-Notes/Volumes/mysql-deployment.yml
+
+...
+
+Validate:
+kubectl get all
+
+kubectl get pvc
+
+kubectl get pvc
+
+kubectl logs podName
+===================================================================================================
+check the Versions:
+	kubectl version --short --client 
+	kubeadm version -o short 
+	kubelet --version
+	kubectl exec kube-apiserver-master -n kube-system -- kube-apiserver --version
+	kubectl exec etcd-master -n kube-system -- etcd --version
+	kubectl exec kube-controller-manager-master -n kube-system -- kube-controller-manager --version
+	kubectl exec kube-scheduler-master -n kube-system -- kube-scheduler --version
+	kubectl exec kube-proxy-j5xjf -n kube-system -- kube-proxy --version
+
+
+Upgrade Kubernetes Componentes: 
+
+# Always first master node:
+
+	remove any hold on the packages:
+		sudo apt-mark unhold kubeadm kubelet kubectl 
+
+	upgrade the kubeadm & hold:
+		sudo apt install -y kubeadm=1.23.11-00
+		kubeadm version -o short 
+
+	Plan the upgrade of all the controller components:
+		sudo kubeadm upgrade plan
+		
+	Upgrade the controller components:
+		sudo kubeadm upgrade apply v1.23.11
+
+	Upgrade kubectl & kubelet :
+		sudo apt install -y kubectl=1.23.11-00 kubelet=1.23.11-00
+
+	apply hold on the packages:
+		sudo apt-mark hold kubeadm kubelet kubectl
+
+
+# Worker Node1
+
+	Drain/cordon Node - disable scheduling of pods -- execute below command on master node 
+		sudo kubectl drain worker1 --ignore-daemonsets
+	
+	Login(ssh) to Worker Nodes: 
+
+	remove any hold on the packages:
+		sudo apt-mark unhold kubeadm kubelet kubectl 
+
+	upgrade the kubeadm & hold:
+		sudo apt install -y kubeadm=1.23.11-00 kubelet=1.23.11-00 kubectl=1.23.11-00
+		kubeadm version -o short 
+		kubelet --version 
+		sudo apt-mark hold kubeadm kubelet kubectl
+
+	Drain/cordon Node - disable scheduling of pods -- execute below command on master node 
+		sudo kubectl uncordon worker1
+
+# Worker Node1
+
+	Drain/cordon Node - disable scheduling of pods -- execute below command on master node 
+		sudo kubectl drain worker2 --ignore-daemonsets
+	
+	Login(ssh) to Worker Nodes: 
+
+	remove any hold on the packages:
+		sudo apt-mark unhold kubeadm kubelet kubectl 
+
+	upgrade the kubeadm & hold:
+		sudo apt install -y kubeadm=1.23.11-00 kubelet=1.23.11-00 kubectl=1.23.11-00
+		kubeadm version -o short 
+		kubelet --version 
+		sudo apt-mark hold kubeadm kubelet kubectl
+
+	Drain/cordon Node - disable scheduling of pods -- execute below command on master node 
+		sudo kubectl uncordon worker2
+    ===============================================================================================
+    # kubectl get configmap
+ 
+ # kubectl create configmap dev-config --from-literal=app.mem=2048m
+ 
+ # kubectl get configmap
+ 
+ # kubectl get configmap dev-config -o yaml
+ # vim dev.properties
+app.env:dev
+app.mem=2048m
+app.properties=dev.env.url
+:wq!
+
+# kubectl create configmap dev-config1 --from-file=dev.properties
+# kubectl get configmap
+# kubectl get configmap dev-config1 -o yaml
+
+Use configmap for a pod
+
+vim pod-configmap.yml
+
+kind: Pod
+apiVersion: v1
+metadata:
+ name: pod-configmap
+spec:
+ containers:
+  - image: nginx
+    name: c1
+    volumeMounts:
+     - name: config-volume
+       mountPath: /etc/config
+ volumes:
+  - name: config-volume
+    configMap:
+     name: dev-config1
+ restartPolicy: Never
+ 
+ :wq!
+ 
+ # kubectl apply -f pod-configmap.yml
+ # kubectl exec -it pod-configmap bash
+ # cd /etc/config
+ 
+ you will find the dev.properties file and configurations
+ 
+ Edit the configMAP
+ 
+ kubectl edit configmap -n <namespace> <configMapName> -o yaml
+
+This opens up a vim editor with the configmap in yaml format. Now simply edit it and save it.
